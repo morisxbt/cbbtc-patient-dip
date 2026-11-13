@@ -12,6 +12,7 @@ let fast: number | null = null;
 let slow: number | null = null;
 let previousGap: number | null = null;
 let closesSeen = 0;
+let firstBarTime: number | null = null;
 let holding = false;
 let highestClose = 0n;
 let pending: 'buy' | 'sell' | null = null;
@@ -52,6 +53,8 @@ await runBars({
       if (pending !== null && fill.client_id.includes(`-${pending}-`)) pending = null;
     }
     if (bar === undefined) return [];
+    if (firstBarTime === null) firstBarTime = bar.t;
+    const elapsedMinutes = Math.floor((bar.t - firstBarTime) / 60_000);
 
     // The protocol supplies one close per batch. EMA values are updated once per received bar;
     // decisions go in this reply and can fill only at the next bar's open.
@@ -90,11 +93,11 @@ await runBars({
 
     if (held !== undefined || pending !== null) return [];
     const minimum = BigInt(state.hello.fees.min_notional_quote_units);
-    if (batch.seq >= 1420 && ownFills === 0) {
+    if ((elapsedMinutes >= 1400 || batch.seq >= 1400) && ownFills === 0) {
       pending = 'buy';
       return [{ side: 'buy', symbol: 'CBBTC', notional_quote_units: minimum + 17n, max_slippage_bps: MAX_SLIPPAGE_BPS, client_id: orderId('buy') } satisfies BuyInput];
     }
-    if (closesSeen <= SLOW_SPAN || !crossedUp) return [];
+    if (elapsedMinutes >= 1410 || closesSeen <= SLOW_SPAN || !crossedUp) return [];
     const amount = buyAmount(state, 'CBBTC');
     if (amount < minimum) return [];
     pending = 'buy';
